@@ -1,8 +1,86 @@
 """teste conexao"""
 
 from typing import Dict
-import paramiko as pmk
 from datetime import date, timedelta
+
+import paramiko as pmk
+from paramiko import (
+    AuthenticationException,
+    BadAuthenticationType,
+    BadHostKeyException,
+    ChannelException,
+    ConfigParseError,
+    CouldNotCanonicalize,
+    IncompatiblePeer,
+    PasswordRequiredException,
+    ProxyCommandFailure,
+    SSHException,
+)
+
+
+class informsUnix:
+    """classe para controlar o trem bao"""
+
+    def __init__(self, enderecoip, username, porta=22, pathkey="") -> None:
+        self._ip = enderecoip
+        self._porta = porta
+        self._user = username
+        self._pathkey = pathkey
+        self._conn = self._setConnection()
+
+    def _setConnection(self) -> pmk.SSHClient:
+        """cria uma conexao SSH com determinado servidor para uso"""
+        password = "testando" if self._user == "testando" else ""
+        try:
+            client = pmk.SSHClient()
+            client.set_missing_host_key_policy(pmk.AutoAddPolicy())
+            client.connect(hostname=self._ip, port=self._porta, username=self._user, password=password)
+            return client
+        except (
+            SSHException,
+            AuthenticationException,
+            PasswordRequiredException,
+            BadAuthenticationType,
+            ChannelException,
+            BadHostKeyException,
+            IncompatiblePeer,
+            ProxyCommandFailure,
+            CouldNotCanonicalize,
+            ConfigParseError,
+            TimeoutError,
+            ConnectionError,
+        ) as sshexc:
+            class_err = self.__getErrorName(str(sshexc.__class__))
+            raise SSHException(f"{class_err} on {self._ip}: {sshexc}") from sshexc
+        except BaseException as sshexc:
+            class_err = self.__getErrorName(str(sshexc.__class__))
+            raise NotImplementedError(f"GeneralSSHError [{class_err}] on {self._ip}: {sshexc}") from sshexc
+
+    def execute(self, command: str):
+        """executa um determinado comando"""
+        try:
+            _stdin, _stdout, _stderr = self._conn.exec_command(command)
+            lines = _stdout.read().decode()
+            return lines
+        except (SSHException, ChannelException, TimeoutError) as sshexc:
+            class_err = self.__getErrorName(str(sshexc.__class__))
+            raise SSHException(f"{class_err} on {self._ip}: {sshexc}") from sshexc
+        except BaseException as sshexc:
+            class_err = self.__getErrorName(str(sshexc.__class__))
+            raise NotImplementedError(f"CommandSSHError [{class_err}] on {self._ip}: {sshexc}") from sshexc
+
+    def endConection(self):
+        """executa um determinado comando"""
+        if self._conn:
+            self._conn.close()
+
+    def __getErrorName(self, typeClassName: str) -> str:
+        """captura o nome do erro a partir da string do tipo da classe"""
+        class_err = typeClassName[8:-2]
+        err_lst = class_err.split(".")
+        if len(err_lst) > 1:
+            class_err = err_lst[len(err_lst) - 1]
+        return class_err
 
 
 def getData(dias: str):
@@ -13,9 +91,6 @@ def getData(dias: str):
 
 
 def getUsersDetailsUnix() -> None:
-    host = "172.20.116.114"
-    username = "testando"
-    password = "testando"
     final_users = []
     list_users: Dict[str, list[str]] = {}
     group_prim: Dict[str, str] = {}
@@ -23,11 +98,9 @@ def getUsersDetailsUnix() -> None:
     expirations_users: list[list[str]] = []
 
     try:
-        client = pmk.client.SSHClient()
-        client.set_missing_host_key_policy(pmk.AutoAddPolicy())
-        client.connect(host, username=username, password=password, port=22)
-        _stdin, _stdout, _stderr = client.exec_command("cat /etc/passwd | cut -d: -f 1,4")
-        lines = _stdout.read().decode()
+        client = informsUnix(enderecoip="172.20.116.114", username="testando")
+        lines = client.execute("cat /etc/passwd | cut -d: -f 1,4")
+
         output = lines.split("\n")
         if list_users != "":
             output.remove("")
@@ -38,8 +111,7 @@ def getUsersDetailsUnix() -> None:
         else:
             print("There was no output for this command")
 
-        _stdin, _stdout, _stderr = client.exec_command("cat /etc/group | cut -d: -f 1,3,4")
-        lines = _stdout.read().decode()
+        lines = client.execute("cat /etc/group | cut -d: -f 1,3,4")
 
         output = lines.split("\n")
         if output != "":
@@ -70,8 +142,8 @@ def getUsersDetailsUnix() -> None:
                     grp[0] = aux
                 list_users.update({user: grp})
 
-        _stdin, _stdout, _stderr = client.exec_command('sudo bash -c "passwd -S --all"')
-        lines = _stdout.read().decode()
+        lines = client.execute('sudo bash -c "passwd -S --all"')
+
         output = lines.split("\n")
         if output != "":
             for line in output:
@@ -81,8 +153,8 @@ def getUsersDetailsUnix() -> None:
         else:
             print("There was no output for this command")
 
-        _stdin, _stdout, _stderr = client.exec_command('sudo bash -c "cat /etc/shadow | cut -d: -f 1,3,8"')
-        lines = _stdout.read().decode()
+        lines = client.execute('sudo bash -c "cat /etc/shadow | cut -d: -f 1,3,8"')
+
         output = lines.split("\n")
         if output != "":
             for line in output:
@@ -99,8 +171,6 @@ def getUsersDetailsUnix() -> None:
 
     except Exception as e:
         print(e)
-    finally:
-        client.close()
 
     print(f"\nfinal_users[{len(final_users)}]: ", final_users)
 
