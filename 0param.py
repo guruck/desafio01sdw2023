@@ -297,7 +297,7 @@ def getUsersDetailsUnix() -> None:
     try:
         command = "sudo -l -U testando"  # noqa: E501, pylint: disable=fixme, line-too-long
         command = "for user in $(cat /etc/passwd | grep -v bin/nologin | grep -v bin/false | cut -d: -f 1); do sudo passwd -S $user | cut -d' ' -f 1,2,3,5; done"  # noqa: E501, pylint: disable=fixme, line-too-long
-        lines = client.execute(command, get_pty=False)
+        lines = client.execute(command, get_pty=True)
 
         output = lines.split("\n")
         if isinstance(output, list) and len(output) > 1:  # geralmente sobra 1 \n vazio
@@ -317,22 +317,43 @@ def getUsersDetailsUnix() -> None:
     except PermissionError as e:
         print("Existe Usuarios, mas não retornou o Detalhe, continua mas faz o LOG disso e notifica")
         print(e)
-        for user in list_users:
-            print(user)
-            str_aux = [user, "Enable", "", ""]
-            expirations_users.append(str_aux)
     except Exception as e:
         print("Existe Usuarios, mas não retornou o Detalhe, continua mas faz o LOG disso e notifica")
         print(e)
     finally:
+        # str_aux = ["usersw", "Enable", "", ""]
+        # expirations_users.append(str_aux)
         if len(expirations_users) == len(list_users):
             print(f"len(expirations_users) == len(list_users): {len(expirations_users)} == {len(list_users)}")
-            print("COLETA OK")
-        else:
-            print(f"len(expirations_users) == len(list_users): {len(expirations_users)} == {len(list_users)}")
+            list_users_aux = list_users
+            for a, b, c, d in expirations_users:
+                if list_users_aux.get(a) is not None:
+                    list_users_aux.pop(a)
+            if len(list_users_aux) == 0:
+                print("COLETA OK")
+            else:
+                print("COLETA defeituosa")
+                for user in list_users_aux:
+                    str_aux = [user, "Enable", "", ""]
+                    expirations_users.append(str_aux)
+        elif len(expirations_users) == 0:
+            print(f"len(expirations_users): {len(expirations_users)}")
+            for user in list_users:
+                str_aux = [user, "Enable", "", ""]
+                expirations_users.append(str_aux)
+        elif len(expirations_users) < len(list_users):
+            print(f"len(expirations_users) < len(list_users): {len(expirations_users)} < {len(list_users)}")
+            list_users_aux = list_users
+            for a, b, c, d in expirations_users:
+                if list_users_aux.get(a) is not None:
+                    list_users_aux.pop(a)
+
+            for user in list_users_aux:
+                str_aux = [user, "Enable", "", ""]
+                expirations_users.append(str_aux)
 
         for a, b, c, d in expirations_users:
-            final_users.append([a, b, c, d, list_users.get(a)])
+            final_users.append([a, b, c, d, [""] if list_users.get(a) is None else list_users.get(a)])
 
     print(f"\nfinal_users[{len(final_users)}]: ", final_users)
 
