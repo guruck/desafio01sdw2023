@@ -112,10 +112,18 @@ class informsUnix:
             err = _stderr.read().decode()
             if err != "":
                 message = err.split("\n")
-                raise SSHException(message[0])
+                raise PermissionError(message[0])
 
             return _stdout.read().decode()
-        except (SSHException, ChannelException, TimeoutError) as sshexc:
+        except PermissionError as sshexc:
+            raise sshexc
+        except TimeoutError as sshexc:
+            class_err = self.__getErrorName(str(sshexc.__class__))
+            if get_pty:
+                raise PermissionError(class_err)
+            else:
+                raise SSHException(f"{class_err} on {self._ip}: {sshexc}") from sshexc
+        except (SSHException, ChannelException) as sshexc:
             class_err = self.__getErrorName(str(sshexc.__class__))
             raise SSHException(f"{class_err} on {self._ip}: {sshexc}") from sshexc
         except BaseException as sshexc:
@@ -289,7 +297,7 @@ def getUsersDetailsUnix() -> None:
     try:
         command = "sudo -l -U testando"  # noqa: E501, pylint: disable=fixme, line-too-long
         command = "for user in $(cat /etc/passwd | grep -v bin/nologin | grep -v bin/false | cut -d: -f 1); do sudo passwd -S $user | cut -d' ' -f 1,2,3,5; done"  # noqa: E501, pylint: disable=fixme, line-too-long
-        lines = client.execute(command, get_pty=True)
+        lines = client.execute(command, get_pty=False)
 
         output = lines.split("\n")
         if isinstance(output, list) and len(output) > 1:  # geralmente sobra 1 \n vazio
@@ -306,12 +314,25 @@ def getUsersDetailsUnix() -> None:
                 expirations_users.append(str_aux)
             print("There was no output for this command")
 
-        for a, b, c, d in expirations_users:
-            final_users.append([a, b, c, d, list_users.get(a)])
-
+    except PermissionError as e:
+        print("Existe Usuarios, mas não retornou o Detalhe, continua mas faz o LOG disso e notifica")
+        print(e)
+        for user in list_users:
+            print(user)
+            str_aux = [user, "Enable", "", ""]
+            expirations_users.append(str_aux)
     except Exception as e:
         print("Existe Usuarios, mas não retornou o Detalhe, continua mas faz o LOG disso e notifica")
         print(e)
+    finally:
+        if len(expirations_users) == len(list_users):
+            print(f"len(expirations_users) == len(list_users): {len(expirations_users)} == {len(list_users)}")
+            print("COLETA OK")
+        else:
+            print(f"len(expirations_users) == len(list_users): {len(expirations_users)} == {len(list_users)}")
+
+        for a, b, c, d in expirations_users:
+            final_users.append([a, b, c, d, list_users.get(a)])
 
     print(f"\nfinal_users[{len(final_users)}]: ", final_users)
 
